@@ -1,55 +1,49 @@
-import { DeployButton } from "@/components/deploy-button";
 import { EnvVarWarning } from "@/components/env-var-warning";
-import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { HamburgerMenu } from "@/components/hamburger-menu";
+import { createClient } from "@/lib/supabase/server";
+import { getTenantId, getTenantName } from "@/lib/tenant";
 import { hasEnvVars } from "@/lib/utils";
-import Link from "next/link";
-import { Suspense } from "react";
 
-export default function ProtectedLayout({
+export default async function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const userEmail = data?.claims?.email as string | undefined;
+
+  let tenantName: string | null = null;
+  try {
+    const tenantId = await getTenantId(supabase);
+    tenantName = await getTenantName(tenantId);
+  } catch {
+    tenantName = null;
+  }
+
   return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"}>Next.js Supabase Starter</Link>
-              <div className="flex items-center gap-2">
-                <DeployButton />
-              </div>
-            </div>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
+    <main className="min-h-screen flex flex-col bg-background">
+      <header className="w-full border-b bg-card sticky top-0 z-10">
+        <div className="max-w-md mx-auto w-full flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="font-heading text-lg font-semibold tracking-wide leading-tight truncate text-primary">
+              {tenantName ?? "Sticker"}
+            </p>
+            {userEmail && (
+              <p className="text-sm text-muted-foreground truncate">
+                {userEmail}
+              </p>
             )}
           </div>
-        </nav>
-        <div className="flex-1 flex flex-col gap-20 max-w-5xl p-5">
-          {children}
+          {!hasEnvVars ? (
+            <EnvVarWarning />
+          ) : (
+            <HamburgerMenu userEmail={userEmail} />
+          )}
         </div>
+      </header>
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <p>
-            Powered by{" "}
-            <a
-              href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-              target="_blank"
-              className="font-bold hover:underline"
-              rel="noreferrer"
-            >
-              Supabase
-            </a>
-          </p>
-          <ThemeSwitcher />
-        </footer>
-      </div>
+      <div className="flex-1 w-full px-4 py-4">{children}</div>
     </main>
   );
 }
