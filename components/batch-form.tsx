@@ -12,13 +12,23 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StickerResult } from "@/components/sticker-result";
 import { Textarea } from "@/components/ui/textarea";
 
-type Category = {
+type ShelfLifeUnit = "minutes" | "hours" | "days";
+
+type Product = {
   id: string;
   name: string;
-  default_shelf_life_days: number | null;
+  default_shelf_life_value: number | null;
+  default_shelf_life_unit: ShelfLifeUnit | null;
 };
 
 type Staff = {
@@ -31,31 +41,38 @@ function toDatetimeLocal(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function computeExpiresAt(madeAtLocal: string, days: number | null) {
-  if (!madeAtLocal || days == null) return "";
+function computeExpiresAt(
+  madeAtLocal: string,
+  value: number | null,
+  unit: ShelfLifeUnit | null,
+) {
+  if (!madeAtLocal || value == null || unit == null) return "";
   const made = new Date(madeAtLocal);
   if (Number.isNaN(made.getTime())) return "";
-  made.setDate(made.getDate() + days);
+  if (unit === "minutes") made.setMinutes(made.getMinutes() + value);
+  else if (unit === "hours") made.setHours(made.getHours() + value);
+  else made.setDate(made.getDate() + value);
   return toDatetimeLocal(made);
 }
 
 export function BatchForm({
-  categories,
+  products,
   staff,
 }: {
-  categories: Category[];
+  products: Product[];
   staff: Staff[];
 }) {
-  const firstCategory = categories[0];
+  const firstProduct = products[0];
   const initialMadeAt = toDatetimeLocal(new Date());
 
-  const [categoryId, setCategoryId] = useState(firstCategory?.id ?? "");
+  const [productId, setProductId] = useState(firstProduct?.id ?? "");
   const [staffId, setStaffId] = useState(staff[0]?.id ?? "");
   const [madeAt, setMadeAt] = useState(initialMadeAt);
   const [expiresAt, setExpiresAt] = useState(
     computeExpiresAt(
       initialMadeAt,
-      firstCategory?.default_shelf_life_days ?? null,
+      firstProduct?.default_shelf_life_value ?? null,
+      firstProduct?.default_shelf_life_unit ?? null,
     ),
   );
   const [expiresManuallyEdited, setExpiresManuallyEdited] = useState(false);
@@ -67,11 +84,15 @@ export function BatchForm({
     Extract<CreateBatchResult, { success: true }> | null
   >(null);
 
-  function handleCategoryChange(newCategoryId: string) {
-    setCategoryId(newCategoryId);
-    const category = categories.find((c) => c.id === newCategoryId);
+  function handleProductChange(newProductId: string) {
+    setProductId(newProductId);
+    const product = products.find((p) => p.id === newProductId);
     setExpiresAt(
-      computeExpiresAt(madeAt, category?.default_shelf_life_days ?? null),
+      computeExpiresAt(
+        madeAt,
+        product?.default_shelf_life_value ?? null,
+        product?.default_shelf_life_unit ?? null,
+      ),
     );
     setExpiresManuallyEdited(false);
   }
@@ -79,20 +100,28 @@ export function BatchForm({
   function handleMadeAtChange(newMadeAt: string) {
     setMadeAt(newMadeAt);
     if (!expiresManuallyEdited) {
-      const category = categories.find((c) => c.id === categoryId);
+      const product = products.find((p) => p.id === productId);
       setExpiresAt(
-        computeExpiresAt(newMadeAt, category?.default_shelf_life_days ?? null),
+        computeExpiresAt(
+          newMadeAt,
+          product?.default_shelf_life_value ?? null,
+          product?.default_shelf_life_unit ?? null,
+        ),
       );
     }
   }
 
   function resetForm() {
     const now = toDatetimeLocal(new Date());
-    setCategoryId(firstCategory?.id ?? "");
+    setProductId(firstProduct?.id ?? "");
     setStaffId(staff[0]?.id ?? "");
     setMadeAt(now);
     setExpiresAt(
-      computeExpiresAt(now, firstCategory?.default_shelf_life_days ?? null),
+      computeExpiresAt(
+        now,
+        firstProduct?.default_shelf_life_value ?? null,
+        firstProduct?.default_shelf_life_unit ?? null,
+      ),
     );
     setExpiresManuallyEdited(false);
     setWeightKg("");
@@ -118,91 +147,77 @@ export function BatchForm({
   if (result) {
     const selectedStaff = staff.find((s) => s.id === staffId);
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Batch created</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={result.qrCodeDataUrl}
-            alt={`QR code linking to ${result.publicUrl}`}
-            className="w-64 h-64"
-          />
-          <div className="text-center">
-            <p className="font-semibold text-lg">{result.categoryName}</p>
-            {selectedStaff && (
-              <p className="text-sm text-muted-foreground">
-                Made by {selectedStaff.name}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-3 w-full">
-            <Button
-              type="button"
-              className="w-full h-12 text-base"
-              onClick={() => window.print()}
-            >
-              Print sticker
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-12 text-base"
-              onClick={resetForm}
-            >
-              Create another batch
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <StickerResult
+        title="Sticker created"
+        productName={result.productName}
+        storageTempRangeLabel={result.storageTempRangeLabel}
+        tenantName={result.tenantName}
+        madeAt={madeAt}
+        expiresAt={expiresAt}
+        weightKg={weightKg}
+        staffName={selectedStaff?.name ?? ""}
+        qrCodeDataUrl={result.qrCodeDataUrl}
+        publicUrl={result.publicUrl}
+        secondaryAction={
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-12 text-base"
+            onClick={resetForm}
+          >
+            Create another sticker
+          </Button>
+        }
+      />
     );
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">New batch</CardTitle>
+        <CardTitle className="text-2xl">New sticker</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div className="grid gap-2">
-            <Label htmlFor="categoryId">Category</Label>
+            <Label htmlFor="productId">Product</Label>
             <Select
-              id="categoryId"
-              name="categoryId"
-              required
-              value={categoryId}
-              onChange={(e) => handleCategoryChange(e.target.value)}
+              name="productId"
+              value={productId}
+              onValueChange={handleProductChange}
+              disabled={products.length === 0}
             >
-              {categories.length === 0 && (
-                <option value="">No categories available</option>
-              )}
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
+              <SelectTrigger id="productId" className="h-11 w-full">
+                <SelectValue placeholder="No products available" />
+              </SelectTrigger>
+              <SelectContent>
+                {products.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="staffId">Staff</Label>
             <Select
-              id="staffId"
               name="staffId"
-              required
               value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
+              onValueChange={setStaffId}
+              disabled={staff.length === 0}
             >
-              {staff.length === 0 && (
-                <option value="">No staff available</option>
-              )}
-              {staff.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}
-                </option>
-              ))}
+              <SelectTrigger id="staffId" className="h-11 w-full">
+                <SelectValue placeholder="No staff available" />
+              </SelectTrigger>
+              <SelectContent>
+                {staff.map((person) => (
+                  <SelectItem key={person.id} value={person.id}>
+                    {person.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
 
@@ -262,16 +277,16 @@ export function BatchForm({
             />
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-sm text-critical">{error}</p>}
 
           <Button
             type="submit"
             className="w-full h-12 text-base"
             disabled={
-              isSubmitting || categories.length === 0 || staff.length === 0
+              isSubmitting || products.length === 0 || staff.length === 0
             }
           >
-            {isSubmitting ? "Creating batch..." : "Create batch & print sticker"}
+            {isSubmitting ? "Creating sticker..." : "Create sticker"}
           </Button>
         </form>
       </CardContent>

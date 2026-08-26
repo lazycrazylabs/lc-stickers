@@ -51,11 +51,30 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        // Day-dot urgency colors — mirror the physical color-coded food
+        // rotation labels cooks already use.
+        fresh: {
+          DEFAULT: "hsl(var(--fresh))",
+          foreground: "hsl(var(--fresh-foreground))",
+        },
+        soon: {
+          DEFAULT: "hsl(var(--soon))",
+          foreground: "hsl(var(--soon-foreground))",
+        },
+        critical: {
+          DEFAULT: "hsl(var(--critical))",
+          foreground: "hsl(var(--critical-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        heading: ["var(--font-heading)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
     },
   },

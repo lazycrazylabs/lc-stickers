@@ -1,24 +1,25 @@
 "use server";
 
-import { headers } from "next/headers";
 import QRCode from "qrcode";
 
 import { createClient } from "@/lib/supabase/server";
-import { getTenantId } from "@/lib/tenant";
+import { getTenantId, getTenantName } from "@/lib/tenant";
 
 export type CreateBatchResult =
   | {
       success: true;
       publicUrl: string;
       qrCodeDataUrl: string;
-      categoryName: string;
+      productName: string;
+      storageTempRangeLabel: string;
+      tenantName: string;
     }
   | { success: false; error: string };
 
 export async function createBatch(
   formData: FormData,
 ): Promise<CreateBatchResult> {
-  const categoryId = formData.get("categoryId");
+  const productId = formData.get("productId");
   const staffId = formData.get("staffId");
   const madeAt = formData.get("madeAt");
   const expiresAt = formData.get("expiresAt");
@@ -26,8 +27,8 @@ export async function createBatch(
   const notesRaw = formData.get("notes");
 
   if (
-    typeof categoryId !== "string" ||
-    !categoryId ||
+    typeof productId !== "string" ||
+    !productId ||
     typeof staffId !== "string" ||
     !staffId ||
     typeof madeAt !== "string" ||
@@ -59,33 +60,36 @@ export async function createBatch(
       .from("batches")
       .insert({
         tenant_id: tenantId,
-        category_id: categoryId,
+        product_id: productId,
         staff_id: staffId,
         made_at: madeAtDate.toISOString(),
         expires_at: expiresAtDate.toISOString(),
         weight_kg: weightKg,
         notes,
       })
-      .select("qr_slug, categories(name)")
+      .select("qr_slug, products(name, storage_temp_ranges(label))")
       .single();
 
     if (error || !batch) {
       return {
         success: false,
-        error: error?.message ?? "Failed to create batch.",
+        error: error?.message ?? "Failed to create sticker.",
       };
     }
 
-    const category = Array.isArray(batch.categories)
-      ? batch.categories[0]
-      : batch.categories;
+    const product = Array.isArray(batch.products)
+      ? batch.products[0]
+      : batch.products;
+    const storageTempRange = Array.isArray(product?.storage_temp_ranges)
+      ? product.storage_temp_ranges[0]
+      : product?.storage_temp_ranges;
 
-    const headersList = await headers();
-    const host = headersList.get("host");
-    const protocol =
-      headersList.get("x-forwarded-proto") ??
-      (process.env.NODE_ENV === "development" ? "http" : "https");
-    const publicUrl = `${protocol}://${host}/b/${batch.qr_slug}`;
+    const tenantName = await getTenantName(tenantId);
+
+    const siteUrl = (
+      process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+    ).replace(/\/+$/, "");
+    const publicUrl = `${siteUrl}/b/${batch.qr_slug}`;
 
     const qrCodeDataUrl = await QRCode.toDataURL(publicUrl, {
       width: 320,
@@ -96,12 +100,14 @@ export async function createBatch(
       success: true,
       publicUrl,
       qrCodeDataUrl,
-      categoryName: category?.name ?? "",
+      productName: product?.name ?? "",
+      storageTempRangeLabel: storageTempRange?.label ?? "",
+      tenantName: tenantName ?? "",
     };
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Failed to create batch.",
+      error: err instanceof Error ? err.message : "Failed to create sticker.",
     };
   }
 }
